@@ -37,7 +37,7 @@
         </template>
         <EventTab :eventList="state.events.before" />
       </a-tab-pane>
-      <a-tab-pane key="eventAfter">
+      <a-tab-pane v-if="props.detail.after" key="eventAfter">
         <template #tab>
           {{ t('debug.event.after') }}
           <number-badge

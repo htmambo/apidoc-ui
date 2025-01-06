@@ -125,6 +125,10 @@
       title: t('apiPage.common.desc'),
       dataIndex: 'desc',
     },
+    {
+      title: t('apiPage.common.note'),
+      dataIndex: 'note',
+    },
   ]
 
   const returnColumns = cloneDeep(paramsColumns)

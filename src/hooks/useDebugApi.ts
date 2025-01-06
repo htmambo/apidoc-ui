@@ -88,6 +88,15 @@ export default (): Types => {
   }
   function renderBodyData(apiDetail: ApiDetailResult, renderType = '') {
     const params = apiDetail?.param as ApiDetailParamItem[]
+    // 如果未定义paramType，或者paramType不是formdata，则检查params中是否有type为file,
+    // files的子项。因为可能会有子项，这里需要将params先转换为json字符串，然后再判断字符串中
+    // 是否包含type:file,type:files的定义
+    if (!apiDetail?.paramType || apiDetail?.paramType !== 'formdata') {
+      const jsonString = JSON.stringify(params)
+      if (jsonString.includes('"type":"file"') || jsonString.includes('"type":"files"')) {
+        apiDetail.paramType = 'formdata'
+      }
+    }
     if (
       apiDetail?.paramType === 'formdata' ||
       apiDetail?.paramType === 'form-data' ||
@@ -245,7 +254,43 @@ export default (): Types => {
         })
     })
   }
-
+  // 添加一个递归处理子项的辅助函数
+  function processFormDataItem(item: any, formData: FormData, parentName = '', paramLevel = 0) {
+    const itemName = parentName ? parentName : item.name
+    console.log(itemName)
+    if (item.children) {
+      if (item.type === 'object') {
+        // 对象类型,子项名称格式为: parent[child]
+        item.children.forEach((child: any) => {
+          const childName = `${itemName}[${child.name}]`
+          processFormDataItem(child, formData, childName)
+        })
+      } else if (item.type === 'array') {
+        // 数组类型,子项名称格式为: parent[paramLevel][child]
+        item.children.forEach((child: any) => {
+          const childName = `${itemName}[${paramLevel}][${child.name}]`
+          processFormDataItem(child, formData, childName, paramLevel + 1)
+        })
+      }
+    } else {
+      // 处理叶子节点
+      if (item.type === 'file') {
+        const fileList = item.default
+        if (fileList && fileList.length) {
+          formData.append(itemName, fileList[0])
+        }
+      } else if (item.type === 'files') {
+        const fileList = item.default
+        if (fileList && fileList.length) {
+          for (let i = 0; i < fileList.length; i++) {
+            formData.append(`${itemName}[]`, fileList[i])
+          }
+        }
+      } else if (item.default || item.default === 0 || typeof item.default === 'boolean') {
+        formData.append(itemName, item.default)
+      }
+    }
+  }
   function excuteDebug(apiDetail: ApiDetailResult, paramsData: any, options: ObjectType<any> = {}) {
     return new Promise((resolve, reject) => {
       const json = renderApiParams(apiDetail, paramsData)
@@ -256,23 +301,7 @@ export default (): Types => {
       if (apiDetail.paramType == 'formdata' || apiDetail.paramType === 'form-data') {
         const formData = new FormData()
         json.body.forEach((item) => {
-          if (item.type === 'file') {
-            const fileList = item.default
-            if (fileList && fileList.length) {
-              formData.append(item.name, fileList[0])
-            }
-          } else if (item.type === 'files') {
-            const fileList = item.default
-            if (fileList && fileList.length) {
-              for (let i = 0; i < fileList.length; i++) {
-                const file = fileList[i]
-                formData.append(`${item.name}[]`, file)
-              }
-            }
-          } else if (item.default || item.default == 0 || typeof item.default == 'boolean') {
-            const value: any = item.default
-            formData.append(item.name, value)
-          }
+          processFormDataItem(item, formData)
         })
         handleRequestParams(apiDetail, { ...json, body: formData }, options)
           .then((res) => {
